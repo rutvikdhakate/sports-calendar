@@ -1,14 +1,11 @@
 import express from 'express';
-import Event from '../models/Event.js';
+import Event from '../models/Events.js'; // Updated import to use 'Events.js'
 
 const router = express.Router();
 
 // Get filtered events
 router.get('/', async (req, res) => {
   try {
-    // Log the incoming request to help with debugging
-    console.log("Received a request to /api/events with query:", req.query);
-
     const { from, to, sports } = req.query;
 
     let query = {};
@@ -18,36 +15,33 @@ router.get('/', async (req, res) => {
       query.start = { $gte: new Date(from), $lte: new Date(to) };
     }
 
-    // Filter by selected sports
+    // Filter by selected sports (case-insensitive for robustness)
     if (sports) {
-      const sportsArray = sports.split(',');
+      // Split sports string into an array, and create regex for case-insensitive matching
+      const sportsArray = sports.split(',').map(s => new RegExp(`^${s}$`, 'i')); 
       query.sport = { $in: sportsArray };
     }
 
-    // Filter by source to only get seeded data
-    query.source = 'seed';
-
+    // Fetch all events that match the query
     const events = await Event.find(query);
 
-    // Log the data fetched from the database
-    console.log(`Found ${events.length} events from the database.`);
-    
-    // FullCalendar requires specific fields like `title`, `start`, `end`, and `extendedProps`
+    // FullCalendar expects event objects directly.
+    // Ensure `id`, `title`, `start`, `end`, and other properties are at the top level.
     const formattedEvents = events.map(event => ({
       id: event._id,
       title: event.title,
       start: event.start,
-      end: event.end,
-      extendedProps: {
-        sport: event.sport,
-        venue: event.venue,
-        meta: event.meta,
-        source: event.source,
-      },
+      end: event.end, 
+      // Directly expose other properties for FullCalendar and modal
+      sport: event.sport,
+      category: event.category,
+      venue: event.venue,
+      meta: event.meta,
+      source: event.source,
     }));
 
     res.json(formattedEvents);
-    console.log("Successfully sent events to the frontend.");
+    console.log(`Successfully sent ${formattedEvents.length} events to the frontend.`);
   } catch (err) {
     console.error("An error occurred in the /api/events route:", err);
     res.status(500).json({ message: err.message });
